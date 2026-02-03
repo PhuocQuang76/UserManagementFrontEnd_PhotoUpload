@@ -69,10 +69,6 @@ pipeline {
 
                             # Start the application
                             nohup ng serve --host 0.0.0.0 --port 4200 > /home/ubuntu/frontend.log 2>&1 &
-                            echo \$! > /home/ubuntu/frontend.pid
-
-                            echo 'Application started with PID: \$(cat /home/ubuntu/frontend.pid)'
-                            echo 'Application logs: /home/ubuntu/frontend.log'
                         "
                     """
                 }
