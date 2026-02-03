@@ -1,21 +1,29 @@
 pipeline {
     agent any
 
-    environment {
-        EC2_IP = '35.172.118.6'
-        REPO_URL = 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'
-        SSH_KEY = '/var/lib/jenkins/userkey.pem'
-        SSH_USER = 'ubuntu'
-        SSH_OPTS = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-        APP_DIR = '/home/ubuntu/user-management-frontEnd'
-    }
 
-    stages {
-        stage('Checkout Code') {
-            steps {
-                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'gitCredential', url: 'https://github.com/PhuocQuang76/UserManagementBackEnd_PhotoUpload.git']])
-            }
+    environment {
+            EC2_IP = '35.172.118.6'
+            REPO_URL = 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'
+            SSH_KEY = '/var/lib/jenkins/userkey.pem'
+            SSH_USER = 'ubuntu'
+            SSH_OPTS = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+            APP_DIR = '/home/ubuntu/user-management-frontEnd'
         }
+
+        stages {
+            stage('Checkout Code') {
+                steps {
+                    checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: '*/main']],
+                        userRemoteConfigs: [[
+                            url: env.REPO_URL,
+                            credentialsId: 'gitCredential'
+                        ]]
+                    ])
+                }
+            }
 
         stage('Prepare EC2 Workspace') {
             steps {
