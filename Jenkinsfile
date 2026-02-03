@@ -56,20 +56,48 @@ pipeline {
 
 
 
-       stage('Start Application') {
-           steps {
-               script {
-                   sh """
-                       ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                           cd ${APP_DIR}
-                           # Kill any existing ng serve process
-                           pkill -f 'ng serve' || true
-                           # Start the Angular app
-                           nohup ng serve --host 0.0.0.0 --port 4200 > /dev/null 2>&1 &
-                           echo 'Angular app started successfully!'
-                       "
-                   """
-               }
+       stage('Deploy and Start') {
+       steps {
+           script {
+               // Create a deployment script
+               sh """
+                   cat > /tmp/deploy.sh << 'EOL'
+                   #!/bin/bash
+                   set -e
+                   cd ${APP_DIR}
+
+                   # Install dependencies
+                   echo "Installing dependencies..."
+                   npm install
+
+                   # Kill any running instance
+                   echo "Stopping any running instances..."
+                   pkill -f "ng serve" || true
+
+                   # Start the app in the background
+                   echo "Starting Angular app..."
+                   nohup ng serve --host 0.0.0.0 --port 4200 > ${APP_DIR}/app.log 2>&1 &
+
+                   # Wait a bit and check if it's running
+                   sleep 5
+                   if pgrep -f "ng serve" > /dev/null; then
+                       echo "Angular app started successfully!"
+                       exit 0
+                   else
+                       echo "Failed to start Angular app"
+                       echo "=== Error Logs ==="
+                       cat ${APP_DIR}/app.log
+                       exit 1
+                   fi
+                   EOL
+
+                   # Copy and run the deployment script
+                   scp ${SSH_OPTS} -i ${SSH_KEY} /tmp/deploy.sh ${SSH_USER}@${EC2_IP}:/tmp/
+                   ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                       chmod +x /tmp/deploy.sh
+                       /tmp/deploy.sh
+                   "
+               """
            }
        }
    }
