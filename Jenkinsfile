@@ -44,49 +44,27 @@ pipeline {
             }
         }
 
-       stage('Deploy and Start') {
-                   steps {
-                       script {
-                           // Create a deployment script
-                           def deployScript = """#!/bin/bash
-                               set -e
-                               cd ${APP_DIR}
+       stage('Start Application') {
+           steps {
+               script {
+                   sh """
+                       # Kill existing process if running
+                       ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "pkill -f ${APP_JAR} || echo 'No process to kill'"
 
-                               echo "=== Stopping any running instances ==="
-                               pkill -f "ng serve" || true
+                       # Start the application
+                       ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                           cd /home/ubuntu
+                           nohup java -jar ${APP_JAR} > app.log 2>&1 &
+                           echo \$! > app.pid
+                       "
 
-                               echo "=== Installing dependencies ==="
-                               npm install
-
-                               echo "=== Starting Angular app ==="
-                               export NODE_OPTIONS=--openssl-legacy-provider
-                               nohup ng serve --host 0.0.0.0 --port 4200 > ${APP_DIR}/app.log 2>&1 &
-
-                               # Wait and check if app started
-                               sleep 10
-                               if ! pgrep -f "ng serve" > /dev/null; then
-                                   echo "=== ERROR: Failed to start Angular app ==="
-                                   cat ${APP_DIR}/app.log
-                                   exit 1
-                               fi
-
-                               echo "=== Angular app started successfully ==="
-                               exit 0
-                           """
-
-                           // Write and execute the script
-                           writeFile file: 'deploy.sh', text: deployScript
-                           sh """
-                               scp ${SSH_OPTS} -i ${SSH_KEY} deploy.sh ${SSH_USER}@${EC2_IP}:/tmp/
-                               ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                                   chmod +x /tmp/deploy.sh
-                                   /tmp/deploy.sh
-                               "
-                           """
-                       }
-                   }
+                       # Wait and verify
+                       sleep 5
+                       ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "pgrep -f ${APP_JAR} || { echo 'App failed to start'; exit 1; }"
+                   """
                }
            }
+       }
 
            post {
                always {
