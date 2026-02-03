@@ -3,25 +3,26 @@ pipeline {
 
     environment {
         EC2_IP = '35.172.118.6'
-        REPO_URL = '[https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'](https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git')
+        REPO_URL = 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'
         SSH_KEY = '/var/lib/jenkins/userkey.pem'
         SSH_USER = 'ubuntu'
         SSH_OPTS = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
         APP_DIR = '/home/ubuntu/user-management-frontEnd'
-        APP_JAR = 'app.jar'  // Make sure this matches your actual JAR filename
+        APP_JAR = 'app.jar'
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                checkout scmGit(
+                checkout([
+                    $class: 'GitSCM',
                     branches: [[name: '*/main']],
                     extensions: [],
                     userRemoteConfigs: [[
                         credentialsId: 'gitCredential',
-                        url: '[https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'](https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git')
+                        url: 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'
                     ]]
-                )
+                ])
             }
         }
 
@@ -64,4 +65,30 @@ pipeline {
 
                         # Wait and verify
                         sleep 5
-                        ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "pgrep -f ${APP_JAR} || { echo 'App failed to start'; exit*
+                        ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "pgrep -f ${APP_JAR} || { echo 'App failed to start'; exit 1; }"
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "=== Checking app status ==="
+            sh """
+                ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                    echo '=== Running processes: ==='
+                    ps aux | grep 'ng serve' || true
+                    echo '=== App logs (last 50 lines): ==='
+                    test -f ${APP_DIR}/app.log && tail -n 50 ${APP_DIR}/app.log || echo 'No log file found'
+                "
+            """
+        }
+        success {
+            echo "App should be running at: http://${EC2_IP}:4200"
+        }
+        failure {
+            echo "Deployment failed. Check the logs above for details."
+        }
+    }
+}
