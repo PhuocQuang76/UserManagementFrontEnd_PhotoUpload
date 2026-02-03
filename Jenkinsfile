@@ -14,14 +14,7 @@ pipeline {
         stages {
             stage('Checkout Code') {
                 steps {
-                    checkout([
-                        $class: 'GitSCM',
-                        branches: [[name: '*/main']],
-                        userRemoteConfigs: [[
-                            url: env.REPO_URL,
-                            credentialsId: 'gitCredential'
-                        ]]
-                    ])
+                    checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'gitCredential', url: 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git']])
                 }
             }
 
