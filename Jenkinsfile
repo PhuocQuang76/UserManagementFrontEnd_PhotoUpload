@@ -13,7 +13,6 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                // This checks out the code on the Jenkins server
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: '*/main']],
@@ -43,7 +42,6 @@ pipeline {
         stage('Copy Code to EC2') {
             steps {
                 script {
-                    // Use rsync for efficient file transfer
                     sh """
                         rsync -avz -e "ssh -i ${SSH_KEY} ${SSH_OPTS}" \
                             --exclude='.git' \
@@ -54,57 +52,53 @@ pipeline {
             }
         }
 
+        stage('Deploy and Start') {
+            steps {
+                script {
+                    sh """
+                        # Create a deployment script
+                        cat > /tmp/deploy.sh << 'EOL'
+                        #!/bin/bash
+                        cd ${APP_DIR}
+                        echo "Installing dependencies..."
+                        npm install
+                        echo "Starting Angular app..."
+                        nohup ng serve --host 0.0.0.0 --port 4200 > ${APP_DIR}/app.log 2>&1 &
+                        sleep 5
+                        if pgrep -f "ng serve" > /dev/null; then
+                            echo "Angular app started successfully!"
+                            exit 0
+                        else
+                            echo "Failed to start Angular app"
+                            echo "=== Error Logs ==="
+                            cat ${APP_DIR}/app.log
+                            exit 1
+                        fi
+                        EOL
 
-
-       stage('Deploy and Start') {
-           steps {
-               script {
-                   // Create a deployment script
-                   sh """
-                       cat > /tmp/deploy.sh << 'EOL'
-                       #!/bin/bash
-                       set -e
-                       cd ${APP_DIR}
-
-                       # Install dependencies
-                       echo "Installing dependencies..."
-                       npm install
-
-                       # Kill any running instance
-                       echo "Stopping any running instances..."
-                       pkill -f "ng serve" || true
-
-                       # Start the app in the background
-                       echo "Starting Angular app..."
-                       nohup ng serve --host 0.0.0.0 --port 4200 > ${APP_DIR}/app.log 2>&1 &
-
-                       # Wait a bit and check if it's running
-                       sleep 5
-                       if pgrep -f "ng serve" > /dev/null; then
-                           echo "Angular app started successfully!"
-                           exit 0
-                       else
-                           echo "Failed to start Angular app"
-                           echo "=== Error Logs ==="
-                           cat ${APP_DIR}/app.log
-                           exit 1
-                       fi
-                       EOL
-
-                       # Copy and run the deployment script
-                       scp ${SSH_OPTS} -i ${SSH_KEY} /tmp/deploy.sh ${SSH_USER}@${EC2_IP}:/tmp/
-                       ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                           chmod +x /tmp/deploy.sh
-                           /tmp/deploy.sh
-                       "
-                   """
-               }
-           }
-       }
+                        # Copy and run the script
+                        scp ${SSH_OPTS} -i ${SSH_KEY} /tmp/deploy.sh ${SSH_USER}@${EC2_IP}:/tmp/
+                        ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                            chmod +x /tmp/deploy.sh
+                            /tmp/deploy.sh
+                        "
+                    """
+                }
+            }
+        }
     }
-}
-post {
-    success {
-        echo "App should be running at: http://${EC2_IP}:4200"
+
+    post {
+        success {
+            echo "App should be running at: http://${EC2_IP}:4200"
+            echo "To check logs: ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} 'tail -f ${APP_DIR}/app.log'"
+        }
+        failure {
+            echo "Deployment failed. Check the logs above for details."
+            sh """
+                echo "=== App Logs ==="
+                ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "tail -n 50 ${APP_DIR}/app.log" || true
+            """
+        }
     }
 }
