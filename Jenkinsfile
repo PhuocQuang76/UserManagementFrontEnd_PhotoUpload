@@ -56,37 +56,20 @@ pipeline {
 
 
 
-        stage('Build and Start') {
+        stage('Run App') {
             steps {
-                script {
-                    sh """
-                        ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                            echo 'Building application...'
-                            cd ${APP_DIR}
-
-                            # Kill any running instances
-                            pkill -f 'ng serve' || echo 'No running instances found'
-
-                            # Start the application
-                            nohup ng serve --host 0.0.0.0 --port 4200 > /home/ubuntu/frontend.log 2>&1 &
-                        "
-                    """
-                }
+                sh """
+                    ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                        cd ${APP_DIR}
+                        nohup ng serve --host 0.0.0.0 --port 4200 > /dev/null 2>&1 &
+                    "
+                """
             }
         }
     }
-
     post {
         success {
-            echo 'Deployment completed successfully!'
-            echo "Application is running on: http://${EC2_IP}:4200"
-            // You can add notification here (Slack, email, etc.)
-        }
-        failure {
-            echo 'Deployment failed. Checking logs...'
-            sh """
-                ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "tail -n 50 /home/ubuntu/frontend.log" || echo "Could not retrieve logs"
-            """
+            echo "App should be running at: http://${EC2_IP}:4200"
         }
     }
 }
