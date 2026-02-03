@@ -56,27 +56,19 @@ pipeline {
 
 
 
-        stages {
-            stage('Build and Run') {
-                steps {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                            cd ${APP_DIR}
-                            # Kill any running instances
-                            pkill -f 'ng serve' || true
-                            # Rebuild and start
-                            npm install
-                            npm run build
-                            nohup ng serve --host 0.0.0.0 --port 4200 > /dev/null 2>&1 &
-                        "
-                    """
-                }
-            }
-        }
-    }
-    post {
-        success {
-            echo "App should be running at: http://${EC2_IP}:4200"
-        }
+       stage('Start Application') {
+           steps {
+               script {
+                   sh """
+                      ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "nohup java -jar /home/ubuntu/${APP_JAR} > /dev/null 2>&1 &"
+                   """
+               }
+           }
+       }
+   }
+}
+post {
+    success {
+        echo "App should be running at: http://${EC2_IP}:4200"
     }
 }
