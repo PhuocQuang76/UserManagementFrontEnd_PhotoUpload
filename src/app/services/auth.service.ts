@@ -8,7 +8,7 @@ import { LoginRequest, LoginResponse, RegisterRequest, AuthUser } from '../model
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'http://100.27.198.48:8091/api/auth';
+  private apiUrl = 'http://44.201.239.239/api/auth';
   private tokenKey = 'auth_token';
   private userKey = 'auth_user';
 

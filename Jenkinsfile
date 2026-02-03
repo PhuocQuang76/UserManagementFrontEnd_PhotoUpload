@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        EC2_IP = '54.92.213.227'
+        EC2_IP = '35.172.118.6'
         REPO_URL = 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'
         SSH_KEY = '/var/lib/jenkins/userkey.pem'
         SSH_USER = 'ubuntu'
@@ -13,15 +13,7 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    extensions: [],
-                    userRemoteConfigs: [[
-                        credentialsId: 'git_credetial',
-                        url: env.REPO_URL
-                    ]]
-                ])
+                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'gitCredential', url: 'https://github.com/PhuocQuang76/UserManagementBackEnd_PhotoUpload.git']])
             }
         }
 
