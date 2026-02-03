@@ -52,41 +52,55 @@ pipeline {
             }
         }
 
-        stage('Deploy and Start') {
-            steps {
-                script {
-                    sh """
-                        # Create a deployment script
-                        cat > /tmp/deploy.sh << 'EOL'
-                        #!/bin/bash
-                        cd ${APP_DIR}
-                        echo "Installing dependencies..."
-                        npm install
-                        echo "Starting Angular app..."
-                        nohup ng serve --host 0.0.0.0 --port 4200 > ${APP_DIR}/app.log 2>&1 &
-                        sleep 5
-                        if pgrep -f "ng serve" > /dev/null; then
-                            echo "Angular app started successfully!"
-                            exit 0
-                        else
-                            echo "Failed to start Angular app"
-                            echo "=== Error Logs ==="
-                            cat ${APP_DIR}/app.log
-                            exit 1
-                        fi
-                        EOL
+       stage('Deploy and Start') {
+           steps {
+               script {
+                   sh """
+                       # Create a deployment script
+                       cat > /tmp/deploy.sh << 'EOL'
+                       #!/bin/bash
+                       set -e
+                       cd ${APP_DIR}
 
-                        # Copy and run the script
-                        scp ${SSH_OPTS} -i ${SSH_KEY} /tmp/deploy.sh ${SSH_USER}@${EC2_IP}:/tmp/
-                        ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                            chmod +x /tmp/deploy.sh
-                            /tmp/deploy.sh
-                        "
-                    """
-                }
-            }
-        }
-    }
+                       # Kill any existing process
+                       echo "Stopping any running instances..."
+                       pkill -f "ng serve" || true
+
+                       # Install dependencies
+                       echo "Installing dependencies..."
+                       npm install
+
+                       # Start the app in the background with nohup and log to file
+                       echo "Starting Angular app..."
+                       nohup bash -c "ng serve --host 0.0.0.0 --port 4200" > ${APP_DIR}/app.log 2>&1 &
+
+                       # Wait for the app to start
+                       echo "Waiting for app to start..."
+                       sleep 10
+
+                       # Check if the app is running
+                       if pgrep -f "ng serve" > /dev/null; then
+                           echo "Angular app started successfully!"
+                           echo "App is running at: http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):4200"
+                           exit 0
+                       else
+                           echo "Failed to start Angular app"
+                           echo "=== Error Logs ==="
+                           cat ${APP_DIR}/app.log
+                           exit 1
+                       fi
+                       EOL
+
+                       # Copy and run the script
+                       scp ${SSH_OPTS} -i ${SSH_KEY} /tmp/deploy.sh ${SSH_USER}@${EC2_IP}:/tmp/
+                       ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                           chmod +x /tmp/deploy.sh
+                           /tmp/deploy.sh
+                       "
+                   """
+               }
+           }
+       }
 
     post {
         success {
