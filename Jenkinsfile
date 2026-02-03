@@ -8,7 +8,6 @@ pipeline {
         SSH_USER = 'ubuntu'
         SSH_OPTS = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
         APP_DIR = '/home/ubuntu/user-management-frontEnd'
-        APP_JAR = 'app.jar'
     }
 
     stages {
@@ -19,8 +18,8 @@ pipeline {
                     branches: [[name: '*/main']],
                     extensions: [],
                     userRemoteConfigs: [[
-                        credentialsId: 'gitCredential',
-                        url: 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'
+                        credentialsId: 'git_credetial',
+                        url: env.REPO_URL
                     ]]
                 ])
             }
@@ -53,42 +52,67 @@ pipeline {
             }
         }
 
-        stage('Start Application') {
-            steps {
-                script {
-                    sh """
-                        # Kill existing process if running
-                        ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "pkill -f ${APP_JAR} || echo 'No process to kill'"
+       stage('Deploy and Start') {
+                   steps {
+                       script {
+                           // Create a deployment script
+                           def deployScript = """#!/bin/bash
+                               set -e
+                               cd ${APP_DIR}
 
-                        # Start the application
-                        ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} 'cd /home/ubuntu && nohup java -jar '${APP_JAR}' > app.log 2>&1 & echo \\$! > app.pid'
+                               echo "=== Stopping any running instances ==="
+                               pkill -f "ng serve" || true
 
-                        # Wait and verify
-                        sleep 5
-                        ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "pgrep -f ${APP_JAR} || { echo 'App failed to start'; exit 1; }"
-                    """
-                }
-            }
-        }
-    }
+                               echo "=== Installing dependencies ==="
+                               npm install
 
-    post {
-        always {
-            echo "=== Checking app status ==="
-            sh """
-                ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                    echo '=== Running processes: ==='
-                    ps aux | grep 'ng serve' || true
-                    echo '=== App logs (last 50 lines): ==='
-                    test -f ${APP_DIR}/app.log && tail -n 50 ${APP_DIR}/app.log || echo 'No log file found'
-                "
-            """
-        }
-        success {
-            echo "App should be running at: http://${EC2_IP}:4200"
-        }
-        failure {
-            echo "Deployment failed. Check the logs above for details."
-        }
-    }
-}
+                               echo "=== Starting Angular app ==="
+                               export NODE_OPTIONS=--openssl-legacy-provider
+                               nohup ng serve --host 0.0.0.0 --port 4200 > ${APP_DIR}/app.log 2>&1 &
+
+                               # Wait and check if app started
+                               sleep 10
+                               if ! pgrep -f "ng serve" > /dev/null; then
+                                   echo "=== ERROR: Failed to start Angular app ==="
+                                   cat ${APP_DIR}/app.log
+                                   exit 1
+                               fi
+
+                               echo "=== Angular app started successfully ==="
+                               exit 0
+                           """
+
+                           // Write and execute the script
+                           writeFile file: 'deploy.sh', text: deployScript
+                           sh """
+                               scp ${SSH_OPTS} -i ${SSH_KEY} deploy.sh ${SSH_USER}@${EC2_IP}:/tmp/
+                               ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                                   chmod +x /tmp/deploy.sh
+                                   /tmp/deploy.sh
+                               "
+                           """
+                       }
+                   }
+               }
+           }
+
+           post {
+               always {
+                   echo "=== Checking app status ==="
+                   sh """
+                       ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                           echo '=== Running processes: ==='
+                           ps aux | grep 'ng serve' || true
+                           echo '=== App logs (last 50 lines): ==='
+                           test -f ${APP_DIR}/app.log && tail -n 50 ${APP_DIR}/app.log || echo 'No log file found'
+                       "
+                   """
+               }
+               success {
+                   echo "App should be running at: http://${EC2_IP}:4200"
+               }
+               failure {
+                   echo "Deployment failed. Check the logs above for details."
+               }
+           }
+       }
