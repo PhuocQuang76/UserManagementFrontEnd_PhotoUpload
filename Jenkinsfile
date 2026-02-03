@@ -52,25 +52,24 @@ pipeline {
             }
         }
 
-      stages {
-          stage('Deploy and Start') {
-              steps {
-                  script {
-                      sh """
-                          # Kill any running instance
-                          ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "pkill -f 'ng serve' || true"
+        stage('Deploy and Start') {
+            steps {
+                script {
+                    sh """
+                        # Kill any running instance
+                        ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "pkill -f 'ng serve' || true"
 
-                          # Install dependencies and start the app
-                          ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                              cd ${APP_DIR}
-                              npm install
-                              nohup ng serve --host 0.0.0.0 --port 4200 > app.log 2>&1 &
-                          "
-                      """
-                  }
-              }
-          }
-      }
+                        # Install dependencies and start the app
+                        ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                            cd ${APP_DIR}
+                            npm install
+                            nohup ng serve --host 0.0.0.0 --port 4200 > ${APP_DIR}/app.log 2>&1 &
+                        "
+                    """
+                }
+            }
+        }
+    }
 
     post {
         success {
