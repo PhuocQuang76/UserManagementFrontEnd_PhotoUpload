@@ -8,12 +8,20 @@ pipeline {
         SSH_USER = 'ubuntu'
         SSH_OPTS = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
         APP_DIR = '/home/ubuntu/user-management-frontEnd'
+        APP_JAR = 'app.jar'  // Added missing variable
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'gitCredential', url: 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git']])
+                checkout scmGit(
+                    branches: [[name: '*/main']],
+                    extensions: [],
+                    userRemoteConfigs: [[
+                        credentialsId: 'gitCredential',
+                        url: 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'
+                    ]]
+                )
             }
         }
 
@@ -52,11 +60,11 @@ pipeline {
                         ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "pkill -f ${APP_JAR} || echo 'No process to kill'"
 
                         # Start the application
-                        ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                        ssh -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} '
                             cd /home/ubuntu
-                            nohup java -jar ${APP_JAR} > app.log 2>&1 &
+                            nohup java -jar '${APP_JAR}' > app.log 2>&1 &
                             echo \\$! > app.pid
-                        "
+                        '
 
                         # Wait and verify
                         sleep 5
