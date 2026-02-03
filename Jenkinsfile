@@ -54,33 +54,20 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
-            steps {
-                script {
-                    sh """
-                        ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                            echo 'Installing dependencies...'
-                            cd ${APP_DIR}
-                            npm install
-                        "
-                    """
-                }
-            }
-        }
+
 
         stage('Build and Start') {
             steps {
                 script {
                     sh """
                         ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                            echo 'Stopping any running instances...'
-                            pkill -f 'ng serve' || echo 'No running instances found'
-
                             echo 'Building application...'
                             cd ${APP_DIR}
-                            ng build --configuration=production
 
-                            echo 'Starting application...'
+                            # Kill any running instances
+                            pkill -f 'ng serve' || echo 'No running instances found'
+
+                            # Start the application
                             nohup ng serve --host 0.0.0.0 --port 4200 > /home/ubuntu/frontend.log 2>&1 &
                             echo \$! > /home/ubuntu/frontend.pid
 
