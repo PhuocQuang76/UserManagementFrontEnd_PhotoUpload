@@ -60,7 +60,14 @@ pipeline {
            steps {
                script {
                    sh """
-                      ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "nohup java -jar /home/ubuntu/${APP_JAR} > /dev/null 2>&1 &"
+                       ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
+                           cd ${APP_DIR}
+                           # Kill any existing ng serve process
+                           pkill -f 'ng serve' || true
+                           # Start the Angular app
+                           nohup ng serve --host 0.0.0.0 --port 4200 > /dev/null 2>&1 &
+                           echo 'Angular app started successfully!'
+                       "
                    """
                }
            }
