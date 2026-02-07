@@ -24,10 +24,11 @@ pipeline {
                     $class: 'GitSCM',
                     branches: [[name: '*/main']],
                     userRemoteConfigs: [[
-                        credentialsId: 'git_credetial',
+                        credentialsId: 'gitCredential',
                         url: env.REPO_URL
                     ]]
                 ])
+
             }
         }
 
