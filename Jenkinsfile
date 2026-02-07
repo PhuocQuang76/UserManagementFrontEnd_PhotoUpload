@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         APP_NAME = 'user-management'
-        EC2_IP = '35.172.118.6'  // ✅ Choose ONE IP and use it everywhere
+        EC2_IP = '35.172.118.6'
         REPO_URL = 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'
         SSH_USER = 'ubuntu'
         WEB_DIR = '/var/www/angular-app'
@@ -18,6 +18,26 @@ pipeline {
     }
 
     stages {
+        stage('Setup Node.js') {
+            steps {
+                sh '''
+                    echo "=== Installing Node.js ==="
+                    # Check if Node.js is installed
+                    if ! command -v node &> /dev/null; then
+                        echo "Node.js not found, installing..."
+                        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                        sudo apt-get install -y nodejs
+                    else
+                        echo "Node.js already installed: $(node -v)"
+                    fi
+
+                    # Verify installation
+                    node -v
+                    npm -v
+                '''
+            }
+        }
+
         stage('Checkout Code') {
             steps {
                 checkout([
@@ -28,7 +48,6 @@ pipeline {
                         url: env.REPO_URL
                     ]]
                 ])
-
             }
         }
 
@@ -60,7 +79,7 @@ pipeline {
             steps {
                 echo "=== DEPLOY STAGE STARTED ==="
                 echo "Environment: ${params.ENVIRONMENT}"
-                echo "Target: ${env.SSH_USER}@${env.EC2_IP}"  // ✅ Fixed
+                echo "Target: ${env.SSH_USER}@${env.EC2_IP}"
 
                 sshagent(['ec2-ssh-key']) {
                     sh '''
@@ -77,13 +96,13 @@ pipeline {
                         tar -czf dist.tar.gz -C "$DIST_FOLDER" .
 
                         echo "=== Step 3: Testing SSH connection ==="
-                        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${SSH_USER}@${EC2_IP} "echo 'SSH OK'"  // ✅ Use variables
+                        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${SSH_USER}@${EC2_IP} "echo 'SSH OK'"
 
                         echo "=== Step 4: Copying file ==="
-                        scp -o StrictHostKeyChecking=no dist.tar.gz ${SSH_USER}@${EC2_IP}:/tmp/  // ✅ Use variables
+                        scp -o StrictHostKeyChecking=no dist.tar.gz ${SSH_USER}@${EC2_IP}:/tmp/
 
                         echo "=== Step 5: Verifying copy ==="
-                        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${EC2_IP} "ls -la /tmp/dist.tar.gz"  // ✅ Use variables
+                        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${EC2_IP} "ls -la /tmp/dist.tar.gz"
 
                         echo "=== Step 6: Deploying ==="
                         ssh -o StrictHostKeyChecking=no ${SSH_USER}@${EC2_IP} "
@@ -96,7 +115,7 @@ pipeline {
                         "
 
                         echo "=== Step 7: Verifying deployment ==="
-                        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${EC2_IP} "ls -la ${WEB_DIR}/"  // ✅ Use variables
+                        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${EC2_IP} "ls -la ${WEB_DIR}/"
 
                         echo "=== DEPLOY COMPLETE ==="
                     '''
