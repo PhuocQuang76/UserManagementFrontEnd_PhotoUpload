@@ -3,10 +3,11 @@ pipeline {
 
     environment {
         APP_NAME = 'user-management'
-        EC2_IP = '35.172.118.6'
+        EC2_IP = '54.147.241.87'
         REPO_URL = 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'
         SSH_USER = 'ubuntu'
         WEB_DIR = '/var/www/angular-app'
+        ENKINS_KEY = '/var/lib/jenkins/userkey.pem'
     }
 
     parameters {
