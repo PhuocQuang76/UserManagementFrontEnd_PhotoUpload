@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:20-alpine'
-            args '--user root'
-        }
-    }
+    agent any
 
     environment {
         APP_NAME = 'user-management'
@@ -95,7 +90,6 @@ pipeline {
                         rm -rf ${WEB_DIR}/*
                         tar -xzf /tmp/dist.tar.gz -C ${WEB_DIR}
                         rm -f /tmp/dist.tar.gz
-                        systemctl --user reload nginx 2>/dev/null || echo 'Nginx reload skipped (no user systemctl)'
                     "
 
                     echo "=== Step 7: Verifying deployment ==="
