@@ -2,12 +2,19 @@ pipeline {
     agent any
 
     environment {
-        EC2_IP = '35.172.118.6'
+        APP_NAME = 'user-management'
+        EC2_IP = '35.172.118.6'  // ✅ Choose ONE IP and use it everywhere
         REPO_URL = 'https://github.com/PhuocQuang76/UserManagementFrontEnd_PhotoUpload.git'
-        SSH_KEY = '/var/lib/jenkins/userkey.pem'
         SSH_USER = 'ubuntu'
-        SSH_OPTS = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-        APP_DIR = '/home/ubuntu/user-management-frontEnd'
+        WEB_DIR = '/var/www/angular-app'
+    }
+
+    parameters {
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['production', 'staging', 'dev'],
+            description: 'Deployment environment'
+        )
     }
 
     stages {
@@ -16,7 +23,6 @@ pipeline {
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: '*/main']],
-                    extensions: [],
                     userRemoteConfigs: [[
                         credentialsId: 'git_credetial',
                         url: env.REPO_URL
@@ -25,94 +31,90 @@ pipeline {
             }
         }
 
-        stage('Prepare EC2 Workspace') {
+        stage('Install Dependencies') {
             steps {
-                script {
-                    sh """
-                        ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                            echo 'Cleaning up previous build...'
-                            rm -rf ${APP_DIR}
-                            mkdir -p ${APP_DIR}
+                sh 'npm ci'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh '''
+                    npx ng build --configuration=production
+
+                    # Find the built files
+                    if [ -d "dist/user-management/browser" ]; then
+                        DIST_FOLDER="dist/user-management/browser"
+                    else
+                        DIST_FOLDER="dist/user-management"
+                    fi
+
+                    echo "Using: $DIST_FOLDER"
+                    ls -la "$DIST_FOLDER"
+                '''
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo "=== DEPLOY STAGE STARTED ==="
+                echo "Environment: ${params.ENVIRONMENT}"
+                echo "Target: ${env.SSH_USER}@${env.EC2_IP}"  // ✅ Fixed
+
+                sshagent(['ec2-ssh-key']) {
+                    sh '''
+                        echo "=== Step 1: Finding dist folder ==="
+                        if [ -d "dist/user-management/browser" ]; then
+                            DIST_FOLDER="dist/user-management/browser"
+                        else
+                            DIST_FOLDER="dist/user-management"
+                        fi
+                        echo "Using: $DIST_FOLDER"
+                        ls -la "$DIST_FOLDER"
+
+                        echo "=== Step 2: Creating tar ==="
+                        tar -czf dist.tar.gz -C "$DIST_FOLDER" .
+
+                        echo "=== Step 3: Testing SSH connection ==="
+                        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${SSH_USER}@${EC2_IP} "echo 'SSH OK'"  // ✅ Use variables
+
+                        echo "=== Step 4: Copying file ==="
+                        scp -o StrictHostKeyChecking=no dist.tar.gz ${SSH_USER}@${EC2_IP}:/tmp/  // ✅ Use variables
+
+                        echo "=== Step 5: Verifying copy ==="
+                        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${EC2_IP} "ls -la /tmp/dist.tar.gz"  // ✅ Use variables
+
+                        echo "=== Step 6: Deploying ==="
+                        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${EC2_IP} "
+                            sudo mkdir -p ${WEB_DIR}
+                            sudo rm -rf ${WEB_DIR}/*
+                            sudo tar -xzf /tmp/dist.tar.gz -C ${WEB_DIR}
+                            sudo chown -R www-data:www-data ${WEB_DIR}
+                            rm -f /tmp/dist.tar.gz
+                            sudo systemctl reload nginx
                         "
-                    """
+
+                        echo "=== Step 7: Verifying deployment ==="
+                        ssh -o StrictHostKeyChecking=no ${SSH_USER}@${EC2_IP} "ls -la ${WEB_DIR}/"  // ✅ Use variables
+
+                        echo "=== DEPLOY COMPLETE ==="
+                    '''
                 }
             }
         }
+    }
 
-        stage('Copy Code to EC2') {
-            steps {
-                script {
-                    sh """
-                        rsync -avz -e "ssh -i ${SSH_KEY} ${SSH_OPTS}" \
-                            --exclude='.git' \
-                            --exclude='node_modules' \
-                            ./ ${SSH_USER}@${EC2_IP}:${APP_DIR}/
-                    """
-                }
-            }
+    post {
+        success {
+            echo "✅ Deployed successfully!"
+            echo "🌐 App available at: http://${env.EC2_IP}/"
+            echo "🌍 Environment: ${params.ENVIRONMENT}"
         }
-
-       stage('Deploy and Start') {
-                   steps {
-                       script {
-                           // Create a deployment script
-                           def deployScript = """#!/bin/bash
-                               set -e
-                               cd ${APP_DIR}
-
-                               echo "=== Stopping any running instances ==="
-                               pkill -f "ng serve" || true
-
-                               echo "=== Installing dependencies ==="
-                               npm install
-
-                               echo "=== Starting Angular app ==="
-                               export NODE_OPTIONS=--openssl-legacy-provider
-                               nohup ng serve --host 0.0.0.0 --port 4200 > ${APP_DIR}/app.log 2>&1 &
-
-                               # Wait and check if app started
-                               sleep 10
-                               if ! pgrep -f "ng serve" > /dev/null; then
-                                   echo "=== ERROR: Failed to start Angular app ==="
-                                   cat ${APP_DIR}/app.log
-                                   exit 1
-                               fi
-
-                               echo "=== Angular app started successfully ==="
-                               exit 0
-                           """
-
-                           // Write and execute the script
-                           writeFile file: 'deploy.sh', text: deployScript
-                           sh """
-                               scp ${SSH_OPTS} -i ${SSH_KEY} deploy.sh ${SSH_USER}@${EC2_IP}:/tmp/
-                               ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                                   chmod +x /tmp/deploy.sh
-                                   /tmp/deploy.sh
-                               "
-                           """
-                       }
-                   }
-               }
-           }
-
-           post {
-               always {
-                   echo "=== Checking app status ==="
-                   sh """
-                       ssh ${SSH_OPTS} -i ${SSH_KEY} ${SSH_USER}@${EC2_IP} "
-                           echo '=== Running processes: ==='
-                           ps aux | grep 'ng serve' || true
-                           echo '=== App logs (last 50 lines): ==='
-                           test -f ${APP_DIR}/app.log && tail -n 50 ${APP_DIR}/app.log || echo 'No log file found'
-                       "
-                   """
-               }
-               success {
-                   echo "App should be running at: http://${EC2_IP}:4200"
-               }
-               failure {
-                   echo "Deployment failed. Check the logs above for details."
-               }
-           }
-       }
+        failure {
+            echo "❌ Pipeline failed!"
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
