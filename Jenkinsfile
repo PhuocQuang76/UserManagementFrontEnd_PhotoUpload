@@ -86,10 +86,13 @@ pipeline {
 
                     echo "=== Step 6: Deploying ==="
                     ssh -i ${JENKINS_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${EC2_IP} "
-                        mkdir -p ${WEB_DIR}
-                        rm -rf ${WEB_DIR}/*
-                        tar -xzf /tmp/dist.tar.gz -C ${WEB_DIR}
+                        sudo mkdir -p ${WEB_DIR}
+                        sudo rm -rf ${WEB_DIR}/*
+                        sudo tar -xzf /tmp/dist.tar.gz -C ${WEB_DIR}
+                        sudo chown -R www-data:www-data ${WEB_DIR}
+                        sudo chmod -R 755 ${WEB_DIR}
                         rm -f /tmp/dist.tar.gz
+                        sudo systemctl reload nginx
                     "
 
                     echo "=== Step 7: Verifying deployment ==="
